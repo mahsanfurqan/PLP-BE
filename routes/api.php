@@ -30,7 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('/logbooks')->group(function () {
         Route::get('/', [LogbookController::class, 'index'])->middleware('role:Kaprodi,Mahasiswa');
         Route::post('/', [LogbookController::class, 'store'])->middleware('role:Mahasiswa');
-        Route::get('/all', [LogbookController::class, 'indexAll'])->middleware('role:Kaprodi');
+        Route::get('/all', [LogbookController::class, 'indexAll'])->middleware('role:Kaprodi,Akademik,Dosen Koordinator');
         Route::get('/validasi', [LogbookController::class, 'indexByGuru'])->middleware('role:Guru,Dosen Pembimbing');
         Route::put('/validasi/{id}', [ValidasiLogbookController::class, 'updateSingleApproverStatus'])->middleware('role:Guru,Dosen Pembimbing');
         Route::delete('/delete/{id}', [LogbookController::class, 'destroy'])->middleware('role:Mahasiswa');
