@@ -24,7 +24,19 @@ class PendaftaranPlpController extends Controller
         $pendaftaranPlp = PendaftaranPlp::where('user_id', Auth::id())->latest()->get();
 
         if (request()->wantsJson()) {
-            return response()->json($pendaftaranPlp, 201);
+            $pendaftaranPlpApi = PendaftaranPlp::with([
+                'user',
+                'pilihanSmk1',
+                'pilihanSmk2',
+                'keminatan',
+                'penempatanSmk',
+            ])->where('user_id', Auth::id())->latest()->get();
+
+            $formatted = $pendaftaranPlpApi
+                ->map(fn($item) => $this->formatPendaftaranForApi($item))
+                ->values();
+
+            return response()->json($formatted, 200);
         }
 
         return Inertia::render(
@@ -39,7 +51,11 @@ class PendaftaranPlpController extends Controller
         $pendaftaranPlp = PendaftaranPlp::where('penempatan', $id)->with('user.mahasiswaPamong')->latest()->get();
 
         if (request()->wantsJson()) {
-            return response()->json($pendaftaranPlp, 201);
+            $formatted = $pendaftaranPlp
+                ->map(fn($item) => $this->formatPendaftaranForApi($item))
+                ->values();
+
+            return response()->json($formatted, 200);
         }
 
         return Inertia::render('Input/InputSmk', [
@@ -50,13 +66,23 @@ class PendaftaranPlpController extends Controller
 
     public function indexAll()
     {
-        $pendaftaranPlp = PendaftaranPlp::with(['user', 'pilihanSmk1', 'pilihanSmk2', 'keminatan'])->latest()->get();
+        $pendaftaranPlp = PendaftaranPlp::with([
+            'user',
+            'pilihanSmk1',
+            'pilihanSmk2',
+            'keminatan',
+            'penempatanSmk',
+        ])->latest()->get();
         $smk = Smk::orderBy('name')->orderBy('name', 'asc')->get(['id', 'name']);
         $dospem = User::where('role', 'Dosen Pembimbing')->orderBy('name', 'asc')->get();
         $guru = User::where('role', 'Guru')->orderBy('name', 'asc')->get();
 
         if (request()->wantsJson()) {
-            return response()->json($pendaftaranPlp, 201);
+            $formatted = $pendaftaranPlp
+                ->map(fn($item) => $this->formatPendaftaranForApi($item))
+                ->values();
+
+            return response()->json($formatted, 200);
         }
 
         return Inertia::render('PembagianPlp', ['pendaftaranPlp' => $pendaftaranPlp, 'smk' => $smk, 'dospem' => $dospem, 'guru' => $guru]);
@@ -117,42 +143,46 @@ class PendaftaranPlpController extends Controller
      */
     public function assign(Request $request, string $id)
     {
-        // Find the Pendaftaran PLP record by ID
+        $payload = $this->normalizeAssignPayload($request);
+
+        $validatedData = validator($payload, [
+            'penempatan' => 'nullable|integer|exists:smks,id',
+            'dosen_pembimbing' => 'required|integer|exists:users,id',
+            'guru_pamong' => 'required|integer|exists:users,id',
+        ])->validate();
+
         $pendaftaran = PendaftaranPlp::findOrFail($id);
 
-        // Validate the request data
-        $validatedData = $request->validate([
-            'penempatan' => 'nullable|exists:smks,id',
-            'dosen_pembimbing' => 'required|exists:users,id',
-            'guru_pamong' => 'required|exists:users,id',
-        ]);
+        DB::transaction(function () use ($pendaftaran, $validatedData) {
+            $pendaftaran->update([
+                'penempatan' => $validatedData['penempatan'] ?? null,
+            ]);
 
-        // Update penempatan pada Pendaftaran PLP
-        $pendaftaran->update([
-            'penempatan' => $validatedData['penempatan'],
-        ]);
+            $mahasiswa = $pendaftaran->user;
+            if ($mahasiswa) {
+                $mahasiswa->update([
+                    'dosen_id' => $validatedData['dosen_pembimbing'],
+                    'guru_id' => $validatedData['guru_pamong'],
+                ]);
+            }
+        });
 
-        // Ambil user (mahasiswa) terkait pendaftaran ini
-        $mahasiswa = $pendaftaran->user;
-
-        // Update dosen_id dan guru_id mahasiswa (kalau memang keduanya ingin diisi dengan dosen_pembimbing)
-        $mahasiswa->update([
-            'dosen_id' => $validatedData['dosen_pembimbing'],
-            'guru_id' => $validatedData['guru_pamong'], // Jika memang dosen pembimbing dianggap sebagai guru juga
+        $updated = $pendaftaran->fresh([
+            'user',
+            'pilihanSmk1',
+            'pilihanSmk2',
+            'keminatan',
+            'penempatanSmk',
         ]);
 
         if ($request->wantsJson()) {
             return response()->json([
-                'message' => 'Berhasil menambahkan penempatan dan dosen pembimbing',
-            ], 201);
+                'message' => 'Berhasil meng-assign penempatan, dosen pembimbing, dan guru pamong.',
+                'data' => $this->formatPendaftaranForApi($updated),
+            ], 200);
         }
 
-        // Return a JSON response
-        return response()->json([
-            'message' => 'Berhasil menambahkan penempatan dan dosen pembimbing',
-            'pendaftaran' => $pendaftaran,
-            'mahasiswa' => $mahasiswa,
-        ]);
+        return back()->with('success', 'Berhasil memperbarui penempatan, dosen pembimbing, dan guru pamong.');
     }
 
 
@@ -194,6 +224,65 @@ class PendaftaranPlpController extends Controller
         });
 
         return back()->with('success', 'Data pada database telah berhasil diperbarui.');
+    }
+
+    private function normalizeAssignPayload(Request $request): array
+    {
+        return [
+            'penempatan' => $this->toNullableInt(
+                $request->input('penempatan', $request->input('penempatan_id', $request->input('id_smk')))
+            ),
+            'dosen_pembimbing' => $this->toNullableInt(
+                $request->input(
+                    'dosen_pembimbing',
+                    $request->input(
+                        'dosen_pembimbing_id',
+                        $request->input('id_dosen_pembimbing', $request->input('id_dospem'))
+                    )
+                )
+            ),
+            'guru_pamong' => $this->toNullableInt(
+                $request->input(
+                    'guru_pamong',
+                    $request->input(
+                        'guru_pamong_id',
+                        $request->input('id_guru_pamong', $request->input('id_pamong'))
+                    )
+                )
+            ),
+        ];
+    }
+
+    private function toNullableInt($value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        return null;
+    }
+
+    private function formatPendaftaranForApi(PendaftaranPlp $pendaftaran): array
+    {
+        $data = $pendaftaran->toArray();
+
+        $dosenId = $this->toNullableInt($pendaftaran->user?->dosen_id);
+        $guruId = $this->toNullableInt($pendaftaran->user?->guru_id);
+
+        $data['dosen_pembimbing'] = $dosenId;
+        $data['guru_pamong'] = $guruId;
+        $data['dosen_pembimbing_id'] = $dosenId;
+        $data['guru_pamong_id'] = $guruId;
+
+        return $data;
     }
 
 

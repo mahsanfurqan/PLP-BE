@@ -20,7 +20,6 @@ class PendaftaranPlp extends Model
         'pilihan_smk_1',
         'pilihan_smk_2',
         'penempatan',
-        'dosen_pembimbing',
     ];
 
     /**
