@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\AnonymousReportController;
 use App\Http\Controllers\KeminatanController;
 use App\Http\Controllers\LogbookController;
 use App\Http\Controllers\SmkController;
@@ -13,9 +14,13 @@ use Illuminate\Support\Facades\Route;
 Route::post('/register', [RegisteredUserController::class, 'store']);
 Route::post('/login', [AuthenticatedSessionController::class, 'store']);
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->middleware('auth:sanctum');
+Route::post('/laporan-anonim', [AnonymousReportController::class, 'store']);
 
 
 Route::middleware('auth:sanctum')->group(function () {
+
+    Route::get('/laporan-anonim', [AnonymousReportController::class, 'index'])->middleware('role:Dosen Koordinator');
+    Route::patch('/laporan-anonim/{id}/read', [AnonymousReportController::class, 'markAsRead'])->middleware('role:Dosen Koordinator');
 
     Route::prefix('/akun')->group(function () {
         Route::get('/dospem', [RegisteredUserController::class, 'indexDospem']);
