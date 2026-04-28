@@ -86,6 +86,33 @@ class AnonymousReportController extends Controller
         ], 200);
     }
 
+    public function showEvidence($id)
+    {
+        $report = AnonymousReport::find($id);
+        if (!$report) {
+            return response()->json([
+                'message' => 'Laporan tidak ditemukan.',
+            ], 404);
+        }
+
+        if (!$report->evidence_image_path) {
+            return response()->json([
+                'message' => 'Bukti gambar tidak tersedia.',
+            ], 404);
+        }
+
+        if (!Storage::disk('public')->exists($report->evidence_image_path)) {
+            return response()->json([
+                'message' => 'File bukti gambar tidak ditemukan di server.',
+            ], 404);
+        }
+
+        $path = Storage::disk('public')->path($report->evidence_image_path);
+        return response()->file($path, [
+            'Cache-Control' => 'private, max-age=1200',
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([

@@ -21,6 +21,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/laporan-anonim', [AnonymousReportController::class, 'index'])->middleware('role:Dosen Koordinator');
     Route::patch('/laporan-anonim/{id}/read', [AnonymousReportController::class, 'markAsRead'])->middleware('role:Dosen Koordinator');
+    Route::get('/laporan-anonim/{id}/evidence', [AnonymousReportController::class, 'showEvidence'])->middleware('role:Dosen Koordinator');
 
     Route::prefix('/akun')->group(function () {
         Route::get('/dospem', [RegisteredUserController::class, 'indexDospem']);
