@@ -12,6 +12,16 @@ use Illuminate\Support\Facades\Storage;
 
 class AnonymousReportController extends Controller
 {
+    private function buildEvidenceImageUrl(Request $request, ?string $path): ?string
+    {
+        if (!$path) {
+            return null;
+        }
+
+        $relativeUrl = Storage::disk('public')->url($path);
+        return rtrim($request->getSchemeAndHttpHost(), '/') . $relativeUrl;
+    }
+
     public function index(Request $request)
     {
         $user = Auth::user();
@@ -23,7 +33,7 @@ class AnonymousReportController extends Controller
             }
         ])->latest()->get();
 
-        $formatted = $reports->map(function ($report) {
+        $formatted = $reports->map(function ($report) use ($request) {
             $notification = $report->coordinatorNotifications->first();
 
             return [
@@ -32,9 +42,10 @@ class AnonymousReportController extends Controller
                 'incident_description' => $report->incident_description,
                 'incident_date' => $report->incident_date,
                 'source' => $report->source,
-                'evidence_image_url' => $report->evidence_image_path
-                    ? url(Storage::disk('public')->url($report->evidence_image_path))
-                    : null,
+                'evidence_image_url' => $this->buildEvidenceImageUrl(
+                    $request,
+                    $report->evidence_image_path
+                ),
                 'created_at' => $report->created_at,
                 'updated_at' => $report->updated_at,
                 'is_read' => $notification?->is_read ?? false,
@@ -129,9 +140,10 @@ class AnonymousReportController extends Controller
                     'incident_description' => $report->incident_description,
                     'incident_date' => $report->incident_date,
                     'source' => $report->source,
-                    'evidence_image_url' => $report->evidence_image_path
-                        ? url(Storage::disk('public')->url($report->evidence_image_path))
-                        : null,
+                    'evidence_image_url' => $this->buildEvidenceImageUrl(
+                        $request,
+                        $report->evidence_image_path
+                    ),
                     'created_at' => $report->created_at,
                     'updated_at' => $report->updated_at,
                 ],
