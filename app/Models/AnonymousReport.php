@@ -11,6 +11,7 @@ class AnonymousReport extends Model
         'incident_description',
         'incident_date',
         'source',
+        'evidence_image_path',
     ];
 
     protected $casts = [

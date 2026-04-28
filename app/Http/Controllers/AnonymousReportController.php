@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class AnonymousReportController extends Controller
 {
@@ -31,6 +32,9 @@ class AnonymousReportController extends Controller
                 'incident_description' => $report->incident_description,
                 'incident_date' => $report->incident_date,
                 'source' => $report->source,
+                'evidence_image_url' => $report->evidence_image_path
+                    ? url(Storage::disk('public')->url($report->evidence_image_path))
+                    : null,
                 'created_at' => $report->created_at,
                 'updated_at' => $report->updated_at,
                 'is_read' => $notification?->is_read ?? false,
@@ -77,16 +81,24 @@ class AnonymousReportController extends Controller
             'student_name' => 'required|string|max:150',
             'incident_description' => 'required|string|max:5000',
             'incident_date' => 'required|date|before_or_equal:today',
+            'evidence_image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:4096',
         ]);
 
         DB::beginTransaction();
 
         try {
+            $evidenceImagePath = null;
+            if ($request->hasFile('evidence_image')) {
+                $evidenceImagePath = $request->file('evidence_image')
+                    ->store('anonymous-reports', 'public');
+            }
+
             $report = AnonymousReport::create([
                 'student_name' => $validated['student_name'],
                 'incident_description' => $validated['incident_description'],
                 'incident_date' => $validated['incident_date'],
                 'source' => 'mobile',
+                'evidence_image_path' => $evidenceImagePath,
             ]);
 
             $coordinators = User::where('role', 'Dosen Koordinator')->get(['id']);
@@ -111,7 +123,18 @@ class AnonymousReportController extends Controller
 
             return response()->json([
                 'message' => 'Laporan berhasil dikirim.',
-                'data' => $report,
+                'data' => [
+                    'id' => $report->id,
+                    'student_name' => $report->student_name,
+                    'incident_description' => $report->incident_description,
+                    'incident_date' => $report->incident_date,
+                    'source' => $report->source,
+                    'evidence_image_url' => $report->evidence_image_path
+                        ? url(Storage::disk('public')->url($report->evidence_image_path))
+                        : null,
+                    'created_at' => $report->created_at,
+                    'updated_at' => $report->updated_at,
+                ],
                 'coordinator_notified_count' => $coordinators->count(),
             ], 201);
         } catch (\Throwable $e) {
